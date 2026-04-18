@@ -14,21 +14,21 @@ from telegram.ext import Application, CommandHandler, ContextTypes
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 
 # --- Configuration (Fill in your details) ---
-YOUR_BOT_TOKEN = "8216244005:AAHd2xupqCn6Saz9Igpugu-kU4khkPC3WV4"
+YOUR_BOT_TOKEN = "8604316553:AAH2VAcWUYnwR2Wiym8fjLh885P7if5aa0E"
 
 # ==================== Multiple Admin IDs ====================
-ADMIN_CHAT_IDS = ["7500869913"]
+ADMIN_CHAT_IDS = ["7291250175"]
 # ==========================================================
 
 # Old chat IDs kept for the first run
-INITIAL_CHAT_IDS = ["-1003053441379"] 
+INITIAL_CHAT_IDS = ["-1003971229688"] 
 
 LOGIN_URL = "https://www.ivasms.com/login"
 BASE_URL = "https://www.ivasms.com/"
 SMS_API_ENDPOINT = "https://www.ivasms.com/portal/sms/received/getsms"
 
-USERNAME = "tawandamahachi07@gmail.com"
-PASSWORD = "mahachi2007"
+USERNAME = ""
+PASSWORD = ""
 
 # Polling interval in seconds
 POLLING_INTERVAL_SECONDS = 2 
