@@ -15,7 +15,7 @@ bot = telebot.TeleBot(BOT_TOKEN, threaded=True, num_threads=20)
 # ================= প্যানেল API ডিটেইলস =================
 # কুকি এবং সেশন কি (এগুলো এক্সপায়ার হলে এখান থেকে পরিবর্তন করতে হবে)
 PANEL_URL = "http://135.125.222.224/ints/agent/res/data_smscdr.php"
-PHPSESSID = "95p9u5brnmqfgt6c0p2um85rma"
+PHPSESSID = "u693o1gg03llvuqjb9ji7n5d45"
 SESSKEY = "Q05RR0FSUUVCTw=="
 
 # ================= ডাটাবেস ও ভ্যারিয়েবল (মেমরি) =================
