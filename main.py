@@ -16,7 +16,7 @@ bot = telebot.TeleBot(BOT_TOKEN, threaded=True, num_threads=20)
 # কুকি এবং সেশন কি (এগুলো এক্সপায়ার হলে এখান থেকে পরিবর্তন করতে হবে)
 PANEL_URL = "http://135.125.222.224/ints/agent/res/data_smscdr.php"
 PHPSESSID = "u693o1gg03llvuqjb9ji7n5d45"
-SESSKEY = "Q05RR0FSUUVCTw=="
+SESSKEY = "Q05RR0FSUUVCUw=="
 
 # ================= ডাটাবেস ও ভ্যারিয়েবল (মেমরি) =================
 # শর্টকাটে টেস্ট করার জন্য কান্ট্রি লিস্ট
