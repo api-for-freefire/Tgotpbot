@@ -8,25 +8,85 @@ from datetime import datetime
 
 # ================= কনফিগারেশন =================
 BOT_TOKEN = "8027331684:AAEt3IHVrLI43Z3n7LElL-zXjSuP1galFDY"  # আপনার বটের টোকেন দিন
-ADMIN_ID = 7291250175              # আপনার টেলিগ্রাম আইডি দিন
+ADMIN_ID = 7291250175               # আপনার টেলিগ্রাম আইডি দিন
 
 bot = telebot.TeleBot(BOT_TOKEN, threaded=True, num_threads=20)
 
-# ================= প্যানেল API ডিটেইলস =================
-# কুকি এবং সেশন কি (এগুলো এক্সপায়ার হলে এখান থেকে পরিবর্তন করতে হবে)
-PANEL_URL = "http://135.125.222.224/ints/agent/res/data_smscdr.php"
-PHPSESSID = "u693o1gg03llvuqjb9ji7n5d45"
-SESSKEY = "Q05RR0FSUUVCUw=="
+# ================= অটো-লগিন এবং সেশন ম্যানেজমেন্ট =================
+panel_session = requests.Session()
+SESSKEY = None
+login_lock = threading.Lock() 
 
-# ================= ডাটাবেস ও ভ্যারিয়েবল (মেমরি) =================
-# শর্টকাটে টেস্ট করার জন্য কান্ট্রি লিস্ট
+def login_to_panel():
+    global SESSKEY
+    with login_lock:
+        print("🔄 Visiting Login Page to solve Math Captcha...")
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+            }
+            
+            # ১. লগিন পেজে যাওয়া (যাতে সেশন তৈরি হয় এবং ক্যাপচা পাই)
+            login_page = panel_session.get('http://135.125.222.224/ints/login', headers=headers, timeout=15)
+            
+            # ২. HTML থেকে ম্যাথ ক্যাপচা খোঁজা (যেমন: "5 + 7")
+            captcha_match = re.search(r'(\d+)\s*\+\s*(\d+)', login_page.text)
+            
+            if captcha_match:
+                num1 = int(captcha_match.group(1))
+                num2 = int(captcha_match.group(2))
+                captcha_answer = str(num1 + num2)
+                print(f"🧩 Captcha Solved: {num1} + {num2} = {captcha_answer}")
+            else:
+                print("⚠️ Math Captcha পাওয়া যায়নি! ডিফল্ট 10 দিয়ে চেষ্টা করছি...")
+                captcha_answer = '10'
+
+            # ৩. লগিন পে-লোড (ডাইনামিক ক্যাপচা অ্যান্সার সহ)
+            login_payload = {
+                'username': 'Akhtar804',
+                'password': 'Yasin12@#',
+                'capt': captcha_answer
+            }
+            login_headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Referer': 'http://135.125.222.224/ints/login'
+            }
+            
+            # ৪. সাইটে লগিন রিকোয়েস্ট পাঠানো
+            print("🚀 Sending Login Request...")
+            panel_session.post('http://135.125.222.224/ints/signin', data=login_payload, headers=login_headers, timeout=15)
+            
+            # ৫. Profile পেজে গিয়ে API Token আনা
+            profile_res = panel_session.get('http://135.125.222.224/ints/agent/Profile', headers=headers, timeout=15)
+            
+            # HTML থেকে Regex দিয়ে API Token বের করা
+            token_match = re.search(r'API Token\s*:\s*([A-Za-z0-9=]+)', profile_res.text)
+            
+            if token_match:
+                SESSKEY = token_match.group(1).strip()
+                print(f"✅ Auto-Login Success! New SESSKEY: {SESSKEY}")
+                return True
+            else:
+                print("❌ Login Failed! Username/Password বা Captcha ভুল হতে পারে।")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Login Error: {e}")
+            return False
+
+# বট রান হওয়ার সাথে সাথেই একবার লগিন করে নেবে
+login_to_panel()
+
+# ================= ডাটাবেস (মেমরি) =================
 SERVICES_DB = {
     "Facebook": {"name": "Facebook", "flag": "🔥", "numbers": []},
     "Telegram": {"name": "Telegram", "flag": "💯", "numbers": []},
     "WhatsApp": {"name": "WhatsApp", "flag": "🌸", "numbers": []}
 }
 
-active_checks = {} # ইউজার কোন নাম্বার চেক করছে তার লিস্ট
+active_checks = {}
 
 # ================= মেনু =================
 def main_menu(user_id):
@@ -42,39 +102,31 @@ def start_cmd(m):
 
 # ================= API OTP চেকিং লজিক =================
 def check_otp_private_panel(chat_id, msg_id, number, srv):
+    global SESSKEY
     uid = str(chat_id)
     start_time = time.time()
     end_time = start_time + 600  # ১০ মিনিট চেক করবে
     
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
         'Accept': 'application/json, text/javascript, */*; q=0.01',
         'X-Requested-With': 'XMLHttpRequest',
-        'Connection': 'keep-alive',
         'Referer': 'http://135.125.222.224/ints/agent/SMSCDRReports'
-    }
-    
-    cookies = {
-        'PHPSESSID': PHPSESSID
     }
     
     while time.time() < end_time:
         if active_checks.get(uid) != number:
-            return # ইউজার অন্য নাম্বার নিলে এই থ্রেড বন্ধ হবে
+            return 
             
         try:
-            # সার্ভারের টাইম যেহেতু 2026 সাল, তাই সেটি ম্যানুয়ালি সেট করতে পারেন
-            # অথবা বর্তমান পিসির টাইম দিলে: current_date = datetime.now().strftime('%Y-%m-%d')
+            # সার্ভারের টাইম যেহেতু 2026 সাল
             current_date = "2026-04-24" 
             
             params = {
                 'fdate1': f'{current_date} 00:00:00',
                 'fdate2': f'{current_date} 23:59:59',
-                'frange': '', 'fclient': '', 'fcli': '', 'fgdate': '', 
-                'fgmonth': '', 'fgrange': '', 'fgclient': '', 'fgnumber': '', 
-                'fgcli': '', 'fg': '0',
                 'fnum': number,
-                'sesskey': SESSKEY,
+                'sesskey': SESSKEY, # অটো-লগিন থেকে পাওয়া টোকেন
                 'sEcho': '1', 'iColumns': '9', 'sColumns': ',,,,,,,,',
                 'iDisplayStart': '0', 'iDisplayLength': '25',
                 'mDataProp_0': '0', 'bSearchable_0': 'true', 'bSortable_0': 'true',
@@ -86,52 +138,58 @@ def check_otp_private_panel(chat_id, msg_id, number, srv):
                 'mDataProp_6': '6', 'bSearchable_6': 'true', 'bSortable_6': 'true',
                 'mDataProp_7': '7', 'bSearchable_7': 'true', 'bSortable_7': 'true',
                 'mDataProp_8': '8', 'bSearchable_8': 'true', 'bSortable_8': 'false',
-                'sSearch': '', 'bRegex': 'false', 'iSortCol_0': '0', 
-                'sSortDir_0': 'desc', 'iSortingCols': '1', '_': int(time.time() * 1000)
+                '_': int(time.time() * 1000)
             }
             
-            response = requests.get(PANEL_URL, params=params, headers=headers, cookies=cookies, timeout=10)
+            api_url = "http://135.125.222.224/ints/agent/res/data_smscdr.php"
+            response = panel_session.get(api_url, params=params, headers=headers, timeout=10)
+            
+            # যদি সেশন এক্সপায়ার হয়ে যায় (সাইট লগিন পেজে রিডাইরেক্ট করে)
+            if "login" in response.url.lower() or "signin" in response.url.lower():
+                print("⚠️ Session Expired mid-process! Auto Re-logging...")
+                if login_to_panel(): # নতুন করে লগিন করে টোকেন নেবে
+                    continue # লুপের শুরু থেকে আবার ট্রাই করবে
             
             if response.status_code == 200:
-                data = response.json()
-                
-                # আপনার JSON অনুযায়ী টোটাল রেকর্ড চেক করা
-                if int(data.get("iTotalRecords", "0")) > 0:
-                    records = data.get("aaData", [])
-                    if records:
-                        # Index 5 এ মেসেজ আছে
-                        full_msg = records[0][5]
-                        
-                        # মেসেজ থেকে শুধু OTP বের করা (4-8 ডিজিটের কোড)
-                        otp_code_match = re.search(r'\b\d{4,8}\b', full_msg)
-                        otp_code = otp_code_match.group(0) if otp_code_match else "N/A"
-                        
-                        time_taken = int(time.time() - start_time)
-                        
-                        text = (
-                            f"✅ **OTP RECEIVED SUCCESSFULLY!**\n\n"
-                            f"📱 **Number:** `{number}`\n"
-                            f"🔑 **Code:** `{otp_code}`\n\n"
-                            f"💬 **Message:** _{full_msg}_\n"
-                            f"⏱ **Time Taken:** {time_taken} Seconds"
-                        )
-                        
-                        # Next Number এর বাটন
-                        markup = InlineKeyboardMarkup()
-                        markup.add(InlineKeyboardButton("🆕 Next Number", callback_data=f"get_{srv}"))
-                        
-                        try:
-                            bot.send_message(chat_id, text, parse_mode="Markdown")
-                            bot.edit_message_text(f"✅ OTP Received For `{number}`.", chat_id, msg_id, reply_markup=markup)
-                        except: pass
-                        return
+                try:
+                    data = response.json()
+                    
+                    if int(data.get("iTotalRecords", "0")) > 0:
+                        records = data.get("aaData", [])
+                        if records:
+                            full_msg = records[0][5] # মেসেজ বের করা
+                            
+                            otp_code_match = re.search(r'\b\d{4,8}\b', full_msg)
+                            otp_code = otp_code_match.group(0) if otp_code_match else "N/A"
+                            
+                            time_taken = int(time.time() - start_time)
+                            
+                            text = (
+                                f"✅ **OTP RECEIVED SUCCESSFULLY!**\n\n"
+                                f"📱 **Number:** `{number}`\n"
+                                f"🔑 **Code:** `{otp_code}`\n\n"
+                                f"💬 **Message:** _{full_msg}_\n"
+                                f"⏱ **Time Taken:** {time_taken} Seconds"
+                            )
+                            
+                            markup = InlineKeyboardMarkup()
+                            markup.add(InlineKeyboardButton("🆕 Next Number", callback_data=f"get_{srv}"))
+                            
+                            try:
+                                bot.send_message(chat_id, text, parse_mode="Markdown")
+                                bot.edit_message_text(f"✅ OTP Received For `{number}`.", chat_id, msg_id, reply_markup=markup)
+                            except: pass
+                            return
+                except ValueError:
+                    # JSON পার্স করতে না পারলে লুপ চলতে থাকবে
+                    pass
                         
         except Exception as e:
-            pass # এরর হলে লুপ কন্টিনিউ করবে (সার্ভার স্লো হলে ক্র্যাশ করবে না)
+            pass # সার্ভার এরর হলে ক্র্যাশ করবে না
             
-        time.sleep(6) # প্রতি ৬ সেকেন্ড পর পর রিকোয়েস্ট করবে
+        time.sleep(5) # ৫ সেকেন্ড পর পর চেক করবে
         
-    # ১০ মিনিট পার হলে টাইমআউট
+    # ১০ মিনিট শেষ হয়ে গেলে
     if active_checks.get(uid) == number:
         try:
             bot.edit_message_text(f"❌ Timeout (10 Mins) / Cancelled..!\n📱 `{number}`", chat_id, msg_id)
@@ -162,16 +220,13 @@ def fetch_number(call):
         return bot.answer_callback_query(call.id, "❌ এই সার্ভিসে নাম্বার শেষ!", show_alert=True)
         
     bot.answer_callback_query(call.id, "Generating Number...")
-    
-    # স্টক থেকে প্রথম নাম্বারটি নিয়ে রিমুভ করা
     assigned_num = SERVICES_DB[srv]["numbers"].pop(0)
     active_checks[str(call.message.chat.id)] = assigned_num
     
     text = f"┌── 𝐍𝐔𝐌𝐁𝐄𝐑 𝐆𝐄𝐍𝐄𝐑𝐀𝐓𝐄𝐃 ──┐\n✨ Number Assigned For {SERVICES_DB[srv]['name']}\n\n𖠌 ℕ𝕦𝕞𝕓𝕖𝕣 : `{assigned_num}`\n\n🔑 𝕆𝕥𝕡 : ⏳ 𝚆𝙰𝙸𝚃𝙸𝙽𝙶...\n└── ──────────────── ──┘"
-    
     bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode="Markdown")
     
-    # ব্যাকগ্রাউন্ডে OTP চেকিং শুরু (Main thread ব্লক না করে)
+    # ব্যাকগ্রাউন্ডে OTP চেকিং
     threading.Thread(target=check_otp_private_panel, args=(call.message.chat.id, call.message.message_id, assigned_num, srv), daemon=True).start()
 
 # ================= অ্যাডমিন: নাম্বার যুক্ত করা =================
@@ -181,7 +236,6 @@ def admin_panel(m):
     markup = InlineKeyboardMarkup(row_width=2)
     for srv, details in SERVICES_DB.items():
         markup.add(InlineKeyboardButton(f"➕ Add {details['name']}", callback_data=f"add_{srv}"))
-    
     bot.send_message(m.chat.id, f"⚙️ **Admin Dashboard**\n\nনাম্বার যুক্ত করতে নিচের বাটন ব্যবহার করুন:", reply_markup=markup, parse_mode="Markdown")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith("add_"))
@@ -194,12 +248,9 @@ def ask_add_num(call):
 def process_add_num(m, srv):
     if m.chat.id != ADMIN_ID: return
     lines = m.text.strip().split('\n')
-    # শুধু সংখ্যাগুলো ফিল্টার করে নেওয়া
     new_nums = [re.sub(r'\D', '', l) for l in lines if l.strip()]
-    
     if new_nums:
         SERVICES_DB[srv]["numbers"].extend(new_nums)
-        # ডুপ্লিকেট রিমুভ
         SERVICES_DB[srv]["numbers"] = list(dict.fromkeys(SERVICES_DB[srv]["numbers"]))
         bot.send_message(m.chat.id, f"✅ **{len(new_nums)}** টি নাম্বার {srv} এ যুক্ত হয়েছে!", parse_mode="Markdown", reply_markup=main_menu(m.chat.id))
     else:
@@ -207,7 +258,7 @@ def process_add_num(m, srv):
 
 # ================= RUNNER =================
 if __name__ == "__main__":
-    print("✅ PRIVATE API BOT IS LIVE!")
+    print("✅ BOT IS LIVE WITH FULL AUTO-LOGIN!")
     while True:
         try:
             bot.infinity_polling(timeout=20, long_polling_timeout=15)
