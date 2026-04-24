@@ -20,17 +20,17 @@ login_lock = threading.Lock()
 def login_to_panel():
     global SESSKEY
     with login_lock:
-        print("🔄 Visiting Login Page to solve Math Captcha...")
+        print("🔄 Visiting Login Page...")
         try:
             headers = {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
             }
             
-            # ১. লগিন পেজে যাওয়া (যাতে সেশন তৈরি হয় এবং ক্যাপচা পাই)
+            # ১. লগিন পেজে যাওয়া
             login_page = panel_session.get('http://135.125.222.224/ints/login', headers=headers, timeout=15)
             
-            # ২. HTML থেকে ম্যাথ ক্যাপচা খোঁজা (যেমন: "5 + 7")
+            # ২. HTML থেকে ম্যাথ ক্যাপচা খোঁজা
             captcha_match = re.search(r'(\d+)\s*\+\s*(\d+)', login_page.text)
             
             if captcha_match:
@@ -39,17 +39,16 @@ def login_to_panel():
                 captcha_answer = str(num1 + num2)
                 print(f"🧩 Captcha Solved: {num1} + {num2} = {captcha_answer}")
             else:
-                print("⚠️ Math Captcha পাওয়া যায়নি! ডিফল্ট 10 দিয়ে চেষ্টা করছি...")
                 captcha_answer = '10'
 
-            # ৩. লগিন পে-লোড (ডাইনামিক ক্যাপচা অ্যান্সার সহ)
+            # ৩. লগিন পে-লোড
             login_payload = {
                 'username': 'Akhtar804',
                 'password': 'Yasin12@#',
                 'capt': captcha_answer
             }
             login_headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Referer': 'http://135.125.222.224/ints/login'
             }
@@ -58,18 +57,18 @@ def login_to_panel():
             print("🚀 Sending Login Request...")
             panel_session.post('http://135.125.222.224/ints/signin', data=login_payload, headers=login_headers, timeout=15)
             
-            # ৫. Profile পেজে গিয়ে API Token আনা
-            profile_res = panel_session.get('http://135.125.222.224/ints/agent/Profile', headers=headers, timeout=15)
+            # ৫. SMSCDRReports পেজে গিয়ে আসল sesskey আনা (Profile পেজ থেকে নয়)
+            reports_res = panel_session.get('http://135.125.222.224/ints/agent/SMSCDRReports', headers=headers, timeout=15)
             
-            # HTML থেকে Regex দিয়ে API Token বের করা
-            token_match = re.search(r'API Token\s*:\s*([A-Za-z0-9=]+)', profile_res.text)
+            # JavaScript থেকে Regex দিয়ে sesskey বের করা
+            token_match = re.search(r'sesskey=([A-Za-z0-9=]+)', reports_res.text)
             
             if token_match:
                 SESSKEY = token_match.group(1).strip()
                 print(f"✅ Auto-Login Success! New SESSKEY: {SESSKEY}")
                 return True
             else:
-                print("❌ Login Failed! Username/Password বা Captcha ভুল হতে পারে।")
+                print("❌ Login Failed! SESSKEY পাওয়া যায়নি। Captcha বা Password ভুল হতে পারে।")
                 return False
                 
         except Exception as e:
@@ -108,7 +107,7 @@ def check_otp_private_panel(chat_id, msg_id, number, srv):
     end_time = start_time + 600  # ১০ মিনিট চেক করবে
     
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36',
         'Accept': 'application/json, text/javascript, */*; q=0.01',
         'X-Requested-With': 'XMLHttpRequest',
         'Referer': 'http://135.125.222.224/ints/agent/SMSCDRReports'
@@ -119,14 +118,17 @@ def check_otp_private_panel(chat_id, msg_id, number, srv):
             return 
             
         try:
-            # সার্ভারের টাইম যেহেতু 2026 সাল
+            # সার্ভারের টাইম (যদি সার্ভার টাইম ঠিক হয়ে যায়, তবে এটি চেঞ্জ করে নেবেন)
             current_date = "2026-04-24" 
             
             params = {
                 'fdate1': f'{current_date} 00:00:00',
                 'fdate2': f'{current_date} 23:59:59',
-                'fnum': number,
-                'sesskey': SESSKEY, # অটো-লগিন থেকে পাওয়া টোকেন
+                'frange': '', 'fclient': '', 
+                'fnum': number,  # ফিল্টার নাম্বার
+                'fcli': '', 'fgdate': '', 'fgmonth': '', 'fgrange': '', 
+                'fgclient': '', 'fgnumber': '', 'fgcli': '', 'fg': '0',
+                'sesskey': SESSKEY, # অটো-লগিন থেকে পাওয়া আসল কি
                 'sEcho': '1', 'iColumns': '9', 'sColumns': ',,,,,,,,',
                 'iDisplayStart': '0', 'iDisplayLength': '25',
                 'mDataProp_0': '0', 'bSearchable_0': 'true', 'bSortable_0': 'true',
@@ -138,26 +140,30 @@ def check_otp_private_panel(chat_id, msg_id, number, srv):
                 'mDataProp_6': '6', 'bSearchable_6': 'true', 'bSortable_6': 'true',
                 'mDataProp_7': '7', 'bSearchable_7': 'true', 'bSortable_7': 'true',
                 'mDataProp_8': '8', 'bSearchable_8': 'true', 'bSortable_8': 'false',
+                'sSearch': '', 'bRegex': 'false', 'iSortCol_0': '0', 'sSortDir_0': 'desc', 'iSortingCols': '1',
                 '_': int(time.time() * 1000)
             }
             
             api_url = "http://135.125.222.224/ints/agent/res/data_smscdr.php"
+            
+            # Request পাঠানো
             response = panel_session.get(api_url, params=params, headers=headers, timeout=10)
             
-            # যদি সেশন এক্সপায়ার হয়ে যায় (সাইট লগিন পেজে রিডাইরেক্ট করে)
-            if "login" in response.url.lower() or "signin" in response.url.lower():
+            # যদি সেশন এক্সপায়ার হয়ে লগিন পেজের HTML রিটার্ন করে
+            if "login" in response.url.lower() or "signin" in response.url.lower() or "login" in response.text.lower()[:500]:
                 print("⚠️ Session Expired mid-process! Auto Re-logging...")
-                if login_to_panel(): # নতুন করে লগিন করে টোকেন নেবে
-                    continue # লুপের শুরু থেকে আবার ট্রাই করবে
+                if login_to_panel(): 
+                    continue # নতুন টোকেন নিয়ে আবার চেক করবে
             
             if response.status_code == 200:
                 try:
-                    data = response.json()
+                    data = response.json() # JSON ডিকোড করা
                     
                     if int(data.get("iTotalRecords", "0")) > 0:
                         records = data.get("aaData", [])
                         if records:
-                            full_msg = records[0][5] # মেসেজ বের করা
+                            # 5 নাম্বার ইনডেক্সে মেসেজ থাকে
+                            full_msg = records[0][5] 
                             
                             otp_code_match = re.search(r'\b\d{4,8}\b', full_msg)
                             otp_code = otp_code_match.group(0) if otp_code_match else "N/A"
@@ -181,15 +187,14 @@ def check_otp_private_panel(chat_id, msg_id, number, srv):
                             except: pass
                             return
                 except ValueError:
-                    # JSON পার্স করতে না পারলে লুপ চলতে থাকবে
+                    # JSON এরর হলে কিছুই করবে না, লুপ চলতে থাকবে
                     pass
                         
         except Exception as e:
-            pass # সার্ভার এরর হলে ক্র্যাশ করবে না
+            pass
             
-        time.sleep(5) # ৫ সেকেন্ড পর পর চেক করবে
+        time.sleep(5) # প্রতি ৫ সেকেন্ড পর পর চেক করবে
         
-    # ১০ মিনিট শেষ হয়ে গেলে
     if active_checks.get(uid) == number:
         try:
             bot.edit_message_text(f"❌ Timeout (10 Mins) / Cancelled..!\n📱 `{number}`", chat_id, msg_id)
@@ -226,7 +231,6 @@ def fetch_number(call):
     text = f"┌── 𝐍𝐔𝐌𝐁𝐄𝐑 𝐆𝐄𝐍𝐄𝐑𝐀𝐓𝐄𝐃 ──┐\n✨ Number Assigned For {SERVICES_DB[srv]['name']}\n\n𖠌 ℕ𝕦𝕞𝕓𝕖𝕣 : `{assigned_num}`\n\n🔑 𝕆𝕥𝕡 : ⏳ 𝚆𝙰𝙸𝚃𝙸𝙽𝙶...\n└── ──────────────── ──┘"
     bot.edit_message_text(text, call.message.chat.id, call.message.message_id, parse_mode="Markdown")
     
-    # ব্যাকগ্রাউন্ডে OTP চেকিং
     threading.Thread(target=check_otp_private_panel, args=(call.message.chat.id, call.message.message_id, assigned_num, srv), daemon=True).start()
 
 # ================= অ্যাডমিন: নাম্বার যুক্ত করা =================
